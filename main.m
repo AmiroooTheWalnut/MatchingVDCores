@@ -3,8 +3,8 @@ clear
 %rng(2157)
 %rng(5)
 %rng(7)%interesting, one circle in the middle
-numShops=6;
-numGyms=6;
+numShops=3;
+numGyms=3;
 
 global shops;
 global gyms;
@@ -22,11 +22,11 @@ shopsPOIs=cell(1,numShops);
 gymsPOIs=cell(1,numShops);
 % Lroi=cell(1,n);
 for i=1:numShops
-    shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:));
+    shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
     addlistener(shopsPOIs{1,i},'ROIMoved',@allevents);
 end
 for i=1:numGyms
-    gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:));
+    gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:),'Color','g');
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
 end
 run(shops,gyms);
@@ -64,84 +64,153 @@ global gymsPOIs;
 figure(1)
 clf
 hold on
-h=voronoi(shops(:,1),shops(:,2));
-set(h, 'Color', 'r')
-voronoi(gyms(:,1),gyms(:,2));
-set(h, 'Color', 'g')
 xlim([0,1])
 ylim([0,1])
 daspect([1,1,1])
 numShops=size(shops,1);
 for i=1:numShops
-    shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:));
+    shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(shopsPOIs{1,i},'ROIMoved',@allevents);
 end
 numGyms=size(gyms,1);
 for i=1:numGyms
-    gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:));
+    gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:),'Color','g');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
 end
-[Svx,Svy]=voronoi(shops(:,1),shops(:,2));
-dt = delaunayTriangulation(shops);
+drawForbiddenAreas(shops,gyms);
+%[SVCells,GVCells]=calcCores(shops,gyms);%DONE
+%drawCore(SVCells,GVCells,shops,gyms);%DONE
+end
 
+function drawForbiddenAreas(shops,gyms)
+h=voronoi(shops(:,1),shops(:,2));
+set(h, 'Color', 'b')
+
+h=voronoi(gyms(:,1),gyms(:,2));
+set(h, 'Color', 'g')
+
+dt = delaunayTriangulation(shops);
 [SSV,SSR] = voronoiDiagram(dt);
-[Svx,Svy]=voronoi(gyms(:,1),gyms(:,2));
 dt = delaunayTriangulation(gyms);
 [GSV,GSR] = voronoiDiagram(dt);
 
-SVCells=calcNeighbors(SSV,SSR,shops);
-GVCells=calcNeighbors(GSV,GSR,gyms);
-drawCore(SVCells,GVCells);
+SVCells=calcNeighbors(SSV,SSR,shops,false);
+GVCells=calcNeighbors(GSV,GSR,gyms,false);
+
+getAllRegions(SVCells,GVCells,SSR,GSR);
+
+disp('!')
 end
 
-function VCells=calcNeighbors(SV,SR,locations)
-VCells=cell(1,3);
-VCells{1,1}='VertexIndices';
-VCells{1,2}='Cell neighbors';
-VCells{1,3}='Cell neighbors circle centers';
-VCells{1,4}='Cell neighbors circle radiuses';
-VCells{1,5}='Arcs';
-for i=1:size(SR,1)
-    VCells{i+1,1}=SR{i,1};
+function getAllRegions(SVCells,GVCells,SSR,GSR)
+allRegions=cell(1,4);
+allRegions{1,1}='Region name';
+allRegions{1,2}='Region owners';
+allRegions{1,3}='Region forbidden to owners';
+allRegions{1,4}='Arcs';
+allCircles=cell(1,6);
+allCircles{1,1}='Circle index';
+allCircles{1,2}='Circle owner';
+allCircles{1,3}='Circle forbidden to owner';
+allCircles{1,4}='Circle center';
+allCircles{1,5}='Circle radius';
+allCircles{1,6}='Is excluded';
+allIntersections=cell(1,4);
+allIntersections{1,1}='Circle 1 index';
+allIntersections{1,2}='Circle 2 index';
+allIntersections{1,3}='Point';
+allIntersections{1,4}='Is checked';
+counter=1;
+for i=1:size(SVCells,1)-1
+    for j=1:size(SVCells{i+1,2},2)
+        allCircles{counter+1,1}=counter;
+        allCircles{counter+1,2}=strcat('S',num2str(SVCells{i+1,2}(1,j)));
+        allCircles{counter+1,3}=strcat('S',num2str(i));
+        allCircles{counter+1,4}=SVCells{i+1,3}(:,j);
+        allCircles{counter+1,5}=SVCells{i+1,4}(:,j);
+        counter=counter+1;
+        viscircles(SVCells{i+1,3}',SVCells{i+1,4}','Color','b');
+    end
+end
+for i=1:size(GVCells,1)-1
+    for j=1:size(GVCells{i+1,2},2)
+        allCircles{counter+1,1}=counter;
+        allCircles{counter+1,2}=strcat('G',num2str(GVCells{i+1,2}(1,j)));
+        allCircles{counter+1,3}=strcat('G',num2str(i));
+        allCircles{counter+1,4}=GVCells{i+1,3}(:,j);
+        allCircles{counter+1,5}=GVCells{i+1,4}(:,j);
+        counter=counter+1;
+        viscircles(GVCells{i+1,3}',GVCells{i+1,4}','Color','g');
+    end
+end
+allIntersections=getAllIntersections(allCircles,allIntersections);
+checkAllCircles(allCircles,allIntersections,allRegions);
+disp('!!!')
 end
 
-for i=1:size(SR,1)
-    neighbors=[];
-    for j=1:size(SR{i,1},2)
-        t=SR{i,1}(1,j);
-        for k=1:size(SR,1)
-            for m=1:size(SR{k,1},2)
-                if SR{k,1}(1,m)==t
-                    if k~=i && t~=1
-                        neighbors(1,size(neighbors,2)+1)=k;
-                    end
-                end
-            end
+function allIntersections=getAllIntersections(allCircles,allIntersections)
+counter=1;
+for i=1:size(allCircles,1)-1
+    for j=i+1:size(allCircles,1)-1
+        [xa,yb]=circcirc(allCircles{i+1,4}(1,1),allCircles{i+1,4}(2,1),allCircles{i+1,5}(1,1),allCircles{j+1,4}(1,1),allCircles{j+1,4}(2,1),allCircles{j+1,5}(1,1));
+        if ~isnan(xa(1,1))
+            allIntersections{counter+1,1}=i;
+            allIntersections{counter+1,2}=j;
+            allIntersections{counter+1,3}=[xa(1,1);yb(1,1)];
+            counter=counter+1;
+            allIntersections{counter+1,1}=i;
+            allIntersections{counter+1,2}=j;
+            allIntersections{counter+1,3}=[xa(1,2);yb(1,2)];
+            counter=counter+1;
         end
     end
-    VCells{i+1,2}=unique(neighbors);
 end
-for i=1:size(SR,1)
-    text(locations(i,1),locations(i,2),num2str(i))
+%disp('!!!')
 end
-%\/\/\/ DETECT NEIGHBOR CIRCLES' CENTERS AND RADIUSES
-for i=1:size(SR,1)
-    centers=zeros(2,size(VCells{i+1,2},2));
-    radiuses=zeros(1,size(VCells{i+1,2},2));
-    for j=1:size(VCells{i+1,2},2)
-        centerSelf=locations(i,:);
-        centerNeighbor=locations(VCells{i+1,2}(1,j),:);
-        centerVector=-centerSelf+centerNeighbor;
-        centers(:,j)=(centerSelf-(1/3)*centerVector)';
-        radiuses(1,j)=sqrt((centerVector(1,1)^2)+(centerVector(1,2)^2))*(2/3);
+
+function checkAllCircles(allCircles,allIntersections,allRegions)
+noIntersectingCircles=1:size(allCircles,1)-1;
+noIntersectingCircles(2,size(noIntersectingCircles,2))=0;
+for i=1:size(allIntersections,1)-1
+    noIntersectingCircles(2,allIntersections{i+1,1}(1,1))=1;
+    noIntersectingCircles(2,allIntersections{i+1,2}(1,1))=1;
+end
+lastRowAllRegions=size(allRegions,1);
+for i=1:size(noIntersectingCircles,2)
+    if noIntersectingCircles(2,i)==0
+        allCircles{i+1,6}=1;
+        allRegions{lastRowAllRegions,1}=strcat(allCircles{i+1,2},'_F:',allCircles{i+1,3});
+        allRegions{lastRowAllRegions,2}=allCircles{i+1,2};
+        getForbiddensOfPoint() ...
+        allRegions{lastRowAllRegions,3}=...;
+        disp('!!!')
     end
-    VCells{i+1,3}=centers;
-    VCells{i+1,4}=radiuses;
 end
-%^^^ DETECT NEIGHBOR CIRCLES' CENTERS AND RADIUSES
-for i=1:size(SR,1)
+disp('!!!')
+end
+
+function forbiddens=getForbiddensOfPoint(point,allCircles)
+
+end
+
+function [SVCells,GVCells]=calcCores(shops,gyms)
+dt = delaunayTriangulation(shops);
+[SSV,SSR] = voronoiDiagram(dt);
+dt = delaunayTriangulation(gyms);
+[GSV,GSR] = voronoiDiagram(dt);
+
+SVCells=calcNeighbors(SSV,SSR,shops,true);
+GVCells=calcNeighbors(GSV,GSR,gyms,true);
+
+SVCells=calcArcs(SVCells,shops);
+GVCells=calcArcs(GVCells,gyms);
+end
+
+function VCells=calcArcs(VCells,locations)
+VCells{1,5}='Arcs';
+for i=1:size(VCells,1)-1
     %for j=1:size(VCells{i+1,2},2)
     %    fimplicit(@(x,y)sqrt((x-locations(VCells{i+1,2}(1,j),1))^2+(y-locations(VCells{i+1,2}(1,j),2))^2)/sqrt(((x-locations(i,1))^2+(y-locations(i,2))^2))-4)
     %end
@@ -152,27 +221,27 @@ for i=1:size(SR,1)
     for j=1:size(VCells{i+1,2},2)
         for k=j+1:size(VCells{i+1,2},2)
             if j~=k
-                neigh1L=locations(VCells{i+1,2}(1,j),:);
-                neigh2L=locations(VCells{i+1,2}(1,k),:);
-                neigh1LX=neigh1L(1,1);
-                neigh1LY=neigh1L(1,2);
-                neigh2LX=neigh2L(1,1);
-                neigh2LY=neigh2L(1,2);
+                %neigh1L=locations(VCells{i+1,2}(1,j),:);
+                %neigh2L=locations(VCells{i+1,2}(1,k),:);
+                %neigh1LX=neigh1L(1,1);
+                %neigh1LY=neigh1L(1,2);
+                %neigh2LX=neigh2L(1,1);
+                %neigh2LY=neigh2L(1,2);
                 
-                cLX=locations(i,1);
-                cLY=locations(i,2);
+                %cLX=locations(i,1);
+                %cLY=locations(i,2);
                 
-                syms x y
+                %syms x y
                 %S=solve(sqrt((x-neigh1LX)^2+(y-neigh1LY)^2)==sqrt((x-neigh2LX)^2+(y-neigh2LY)^2),y)
-                lineEqn=2*x*(neigh1LX-neigh2LX)+2*y*(neigh1LY-neigh2LY)+((neigh2LX^2)-(neigh1LX^2)+(neigh2LY^2)-(neigh1LY^2));
-                circleEqn=sqrt((x-neigh1LX)^2+(y-neigh1LY)^2)/sqrt(((x-cLX)^2+(y-cLY)^2));
+                %lineEqn=2*x*(neigh1LX-neigh2LX)+2*y*(neigh1LY-neigh2LY)+((neigh2LX^2)-(neigh1LX^2)+(neigh2LY^2)-(neigh1LY^2));
+                %circleEqn=sqrt((x-neigh1LX)^2+(y-neigh1LY)^2)/sqrt(((x-cLX)^2+(y-cLY)^2));
                 %circleEqnO=sqrt((x-neigh2LX)^2+(y-neigh2LY)^2)/sqrt(((x-cLX)^2+(y-cLY)^2));
                 
                 %fimplicit(y==S)
                 %fimplicit(lineEqn)
-                if i==1
+                %if i==1
                     %viscircles(VCells{i+1,3}',VCells{i+1,4}')
-                end
+                %end
                 %fimplicit(circleEqn==2)%OLD IMPLICIT WAY. NOW I HAVE CIRCLES
                 %fimplicit(circleEqnO==4)
                 
@@ -205,9 +274,6 @@ for i=1:size(SR,1)
                         u = u/norm(u);
                         v = v/norm(v);
                         
-                        dotV=u(1,1)*u(1,2)+v(1,1)*v(1,2);
-                        detV=u(1,1)*v(1,2)-v(1,1)*u(1,2);
-                        
                         %angle = atan2(detV,dotV)*(180/pi);
                         %aa=mod(atan2d(u,v)+360,360)
                         angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
@@ -225,9 +291,6 @@ for i=1:size(SR,1)
                         u = u/norm(u);
                         v = v/norm(v);
                         
-                        dotV=u(1,1)*u(1,2)+v(1,1)*v(1,2);
-                        detV=u(1,1)*v(1,2)-v(1,1)*u(1,2);
-                        
                         %angle = atan2(detV,dotV)*(180/pi);
                         %aa=mod(atan2d(u,v)+360,360)
                         angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
@@ -240,8 +303,6 @@ for i=1:size(SR,1)
                         v=[xa(1,h)-locations(i,1),yb(1,h)-locations(i,2)];
                         u = u/norm(u);
                         v = v/norm(v);
-                        dotV=u(1,1)*u(1,2)+v(1,1)*v(1,2);
-                        detV=u(1,1)*v(1,2)-v(1,1)*u(1,2);
                         angleFromCenter=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
                         if yb(1,h)-locations(i,2)<0
                             angleFromCenter=360-abs(angleFromCenter);
@@ -272,8 +333,6 @@ for i=1:size(SR,1)
     v=[closestInitialPoint(1,1)-VCells{i+1,3}(1,II),closestInitialPoint(1,2)-VCells{i+1,3}(2,II)];
     u = u/norm(u);
     v = v/norm(v);
-    dotV=u(1,1)*u(1,2)+v(1,1)*v(1,2);
-    detV=u(1,1)*v(1,2)-v(1,1)*u(1,2);
     initalAngle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
     if closestInitialPoint(1,2)-VCells{i+1,3}(2,II)<0
         initalAngle=360-abs(initalAngle);
@@ -286,9 +345,6 @@ for i=1:size(SR,1)
     currentAngle=0;
     
     arcs(2,size(arcs,2))=initalAngle;
-    %allIntersectionSortedFirst = sort(allIntersection,6);
-    %allIntersectionSortedSecond = sort(allIntersection,7);
-    %lastIntersectionIndex=0;
     isNewArcFound=true;
     while(isNewArcFound==true)
         isNewArcFound=false;
@@ -305,18 +361,6 @@ for i=1:size(SR,1)
                         arcs(3,size(arcs,2))=allIntersection(g,6);
                         isNewArcFound=true;
                     end
-                    %                     currentAngle=allIntersectionSortedFirst(g,6);
-                    %                     if allIntersectionSortedFirst(g,3)==currentActiveArc
-                    %                         currentActiveArc=allIntersectionSortedFirst(g,4);
-                    %                     else
-                    %                         currentActiveArc=allIntersectionSortedFirst(g,3);
-                    %                     end
-                    %                     arcs(3,size(arcs,2))=allIntersectionSortedFirst(g,6);
-                    %                     arcs(1,size(arcs,2)+1)=currentActiveArc;
-                    %                     arcs(2,size(arcs,2))=allIntersectionSortedFirst(g,7);
-                    %                     isNewArcFound=true;
-                    %                     lastIntersectionIndex=g;
-                    %                     break;
                 end
             elseif allIntersection(g,4)==currentActiveArc
                 if currentAngle<allIntersection(g,8)
@@ -327,18 +371,6 @@ for i=1:size(SR,1)
                         arcs(3,size(arcs,2))=allIntersection(g,7);
                         isNewArcFound=true;
                     end
-                    %                     currentAngle=allIntersectionSortedSecond(g,7);
-                    %                     if allIntersectionSortedSecond(g,3)==currentActiveArc
-                    %                         currentActiveArc=allIntersectionSortedSecond(g,4);
-                    %                     else
-                    %                         currentActiveArc=allIntersectionSortedSecond(g,3);
-                    %                     end
-                    %                     arcs(3,size(arcs,2))=allIntersectionSortedSecond(g,7);
-                    %                     arcs(1,size(arcs,2)+1)=currentActiveArc;
-                    %                     arcs(2,size(arcs,2))=allIntersectionSortedSecond(g,6);
-                    %                     isNewArcFound=true;
-                    %                     lastIntersectionIndex=g;
-                    %                     break;
                 end
             end
         end
@@ -348,50 +380,75 @@ for i=1:size(SR,1)
             arcs(1,size(arcs,2)+1)=currentActiveArc;
             arcs(2,size(arcs,2))=transitionAngle;
         end
-        %{
-        for g=1:size(allIntersectionSorted,1)
-            if currentAngle<allIntersectionSorted(g,activeArcOnIntersection)
-                currentAngle=allIntersectionSorted(g,activeArcOnIntersection);
-                if allIntersectionSorted(g,3)==currentActiveArc
-                    currentActiveArc=allIntersectionSorted(g,4);
-                else
-                    currentActiveArc=allIntersectionSorted(g,3);
-                end
-                arcs(1,size(arcs,2)+1)=currentActiveArc;
-                arcs(2,size(arcs,2))=allIntersectionSorted(g,activeArcOnIntersection);
-                isNewArcFound=true;
-                break;
-            end
-        end
-        %}
     end
-    %{
-    if size(allIntersection,1)>1
-        notClosest=allIntersection;
-        [~,I]=min(intersectionDistances);
-        notClosest(I,:)=[];
-        if i==1
-            scatter(notClosest(:,1),notClosest(:,2));
-            scatter(allIntersection(I,1),allIntersection(I,2),'filled');
-        end
-    end
-    %}
     arcs(size(arcs,1),size(arcs,2))=arcs(2,1);
     VCells{i+1,5}=arcs;
     %disp('!')
 end
+end
+
+function VCells=calcNeighbors(SV,SR,locations,isSelf)
+VCells=cell(1,3);
+VCells{1,1}='VertexIndices';
+VCells{1,2}='Cell neighbors';
+VCells{1,3}='Cell neighbors circle centers';
+VCells{1,4}='Cell neighbors circle radiuses';
+for i=1:size(SR,1)
+    VCells{i+1,1}=SR{i,1};
+end
+
+for i=1:size(SR,1)
+    neighbors=[];
+    for j=1:size(SR{i,1},2)
+        t=SR{i,1}(1,j);
+        for k=1:size(SR,1)
+            for m=1:size(SR{k,1},2)
+                if SR{k,1}(1,m)==t
+                    if k~=i && t~=1
+                        neighbors(1,size(neighbors,2)+1)=k;
+                    end
+                end
+            end
+        end
+    end
+    VCells{i+1,2}=unique(neighbors);
+end
+for i=1:size(SR,1)
+    text(locations(i,1),locations(i,2),num2str(i))
+end
+%\/\/\/ DETECT NEIGHBOR CIRCLES' CENTERS AND RADIUSES
+for i=1:size(SR,1)
+    centers=zeros(2,size(VCells{i+1,2},2));
+    radiuses=zeros(1,size(VCells{i+1,2},2));
+    for j=1:size(VCells{i+1,2},2)
+        centerSelf=locations(i,:);
+        centerNeighbor=locations(VCells{i+1,2}(1,j),:);
+        centerVector=-centerSelf+centerNeighbor;
+        if isSelf==true
+            centers(:,j)=(centerNeighbor-(1/3)*centerVector)';
+        else
+            centers(:,j)=(centerNeighbor+(1/3)*centerVector)';
+        end
+        radiuses(1,j)=sqrt((centerVector(1,1)^2)+(centerVector(1,2)^2))*(2/3);
+    end
+    VCells{i+1,3}=centers;
+    VCells{i+1,4}=radiuses;
+end
+%^^^ DETECT NEIGHBOR CIRCLES' CENTERS AND RADIUSES
 %disp('!')
 end
 
-function drawCore(ShopVCells,gymVCells)
-drawVCells(ShopVCells,'r')
-drawVCells(gymVCells,'g')
+function drawCore(ShopVCells,gymVCells,shops,gyms)
+drawVCells(ShopVCells,'b',shops)
+drawVCells(gymVCells,'g',gyms)
 
 %disp('!!!')
 
 end
 
-function drawVCells(VCells,color)
+function drawVCells(VCells,color,POIs)
+h=voronoi(POIs(:,1),POIs(:,2));
+set(h, 'Color', color)
 eachArcStep=0.01;
 for cir=2:size(VCells,1)
     xs=[];
@@ -422,8 +479,6 @@ for cir=2:size(VCells,1)
             else
                 theta = (0)*pi/180:eachArcStep:(360)*pi/180;
             end
-            
-            %lastAngle=(VCells{cir,5}(2,j))*pi/180;
             
             x = xc + r*cos(theta);
             y = yc + r*sin(theta);
