@@ -1,7 +1,7 @@
 clc
 clear
 %rng(2157)
-%rng(5)
+rng(5)
 %rng(7)%interesting, one circle in the middle
 numShops=3;
 numGyms=3;
@@ -91,6 +91,8 @@ set(h, 'Color', 'b')
 h=voronoi(gyms(:,1),gyms(:,2));
 set(h, 'Color', 'g')
 
+legend('Shop POI','Shop forbidden','Gym POI','Gym forbidden')
+
 dt = delaunayTriangulation(shops);
 [SSV,SSR] = voronoiDiagram(dt);
 dt = delaunayTriangulation(gyms);
@@ -99,12 +101,12 @@ dt = delaunayTriangulation(gyms);
 SVCells=calcNeighbors(SSV,SSR,shops,false);
 GVCells=calcNeighbors(GSV,GSR,gyms,false);
 
-getAllRegions(SVCells,GVCells,SSR,GSR);
+[allRegions,allCircles,allIntersections]=getAllRegions(SVCells,GVCells,SSR,GSR);
 
 disp('!')
 end
 
-function getAllRegions(SVCells,GVCells,SSR,GSR)
+function [allRegions,allCircles,allIntersections]=getAllRegions(SVCells,GVCells,SSR,GSR)
 allRegions=cell(1,4);
 allRegions{1,1}='Region name';
 allRegions{1,2}='Region owners';
@@ -117,11 +119,14 @@ allCircles{1,3}='Circle forbidden to owner';
 allCircles{1,4}='Circle center';
 allCircles{1,5}='Circle radius';
 allCircles{1,6}='Is excluded';
-allIntersections=cell(1,4);
+allIntersections=cell(1,7);
 allIntersections{1,1}='Circle 1 index';
 allIntersections{1,2}='Circle 2 index';
 allIntersections{1,3}='Point';
 allIntersections{1,4}='Is checked';
+allIntersections{1,5}='Angle to circle 1';
+allIntersections{1,6}='Angle to circle 2';
+allIntersections{1,7}='Angle to circle candidate';
 counter=1;
 for i=1:size(SVCells,1)-1
     for j=1:size(SVCells{i+1,2},2)
@@ -146,7 +151,8 @@ for i=1:size(GVCells,1)-1
     end
 end
 allIntersections=getAllIntersections(allCircles,allIntersections);
-checkAllCircles(allCircles,allIntersections,allRegions);
+[allCircles,allIntersections,allRegions]=checkAllCircles(allCircles,allIntersections,allRegions);
+checkAllIntersections(allCircles,allIntersections,allRegions);
 disp('!!!')
 end
 
@@ -159,10 +165,55 @@ for i=1:size(allCircles,1)-1
             allIntersections{counter+1,1}=i;
             allIntersections{counter+1,2}=j;
             allIntersections{counter+1,3}=[xa(1,1);yb(1,1)];
+            
+            u=[allCircles{i+1,5}(1,1),0];
+            v=[xa(1,1)-allCircles{i+1,4}(1,1),yb(1,1)-allCircles{i+1,4}(2,1)];
+            u = u/norm(u);
+            v = v/norm(v);
+            angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+            if yb(1,1)-allCircles{i+1,4}(2,1)<0
+                angle=360-abs(angle);
+            end
+                        
+            allIntersections{counter+1,5}=angle;
+            
+            u=[allCircles{j+1,5}(1,1),0];
+            v=[xa(1,1)-allCircles{j+1,4}(1,1),yb(1,1)-allCircles{j+1,4}(2,1)];
+            u = u/norm(u);
+            v = v/norm(v);
+            angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+            if yb(1,1)-allCircles{j+1,4}(2,1)<0
+                angle=360-abs(angle);
+            end
+            
+            allIntersections{counter+1,6}=angle;
             counter=counter+1;
             allIntersections{counter+1,1}=i;
             allIntersections{counter+1,2}=j;
             allIntersections{counter+1,3}=[xa(1,2);yb(1,2)];
+            
+            u=[allCircles{i+1,5}(1,1),0];
+            v=[xa(1,2)-allCircles{i+1,4}(1,1),yb(1,2)-allCircles{i+1,4}(2,1)];
+            u = u/norm(u);
+            v = v/norm(v);
+            angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+            if yb(1,2)-allCircles{i+1,4}(2,1)<0
+                angle=360-abs(angle);
+            end
+            
+            allIntersections{counter+1,5}=angle;
+            
+            u=[allCircles{j+1,5}(1,1),0];
+            v=[xa(1,2)-allCircles{j+1,4}(1,1),yb(1,2)-allCircles{j+1,4}(2,1)];
+            u = u/norm(u);
+            v = v/norm(v);
+            angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+            if yb(1,2)-allCircles{j+1,4}(2,1)<0
+                angle=360-abs(angle);
+            end
+            
+            allIntersections{counter+1,6}=angle;
+            %disp('!!!')
             counter=counter+1;
         end
     end
@@ -170,7 +221,438 @@ end
 %disp('!!!')
 end
 
-function checkAllCircles(allCircles,allIntersections,allRegions)
+function checkAllIntersections(allCircles,allIntersections,allRegions)
+lastRowAllRegions=size(allRegions,1);
+for i=1:size(allIntersections,1)-1
+    generatedPoints=generateFourPoints(allCircles,allIntersections{i+1,3},allIntersections{i+1,1},allIntersections{i+1,2});
+    %scatter(allIntersections{i+1,3}(1,1),allIntersections{i+1,3}(2,1))
+    for j=1:4
+        scatter(generatedPoints(1,j),generatedPoints(2,j))
+        forbiddens=getForbiddensOfPoint(generatedPoints(:,j),allCircles);
+        forbiddenCircleIndices=[];
+        if sum(forbiddens)~=0
+            forbiddenCircleIndices(1,sum(forbiddens))=0;
+            counter=1;
+            for k=1:size(forbiddens,2)
+                if forbiddens(1,k)==1
+                    forbiddenCircleIndices(1,counter)=k;
+                    counter=counter+1;
+                end
+            end
+        end
+        if j==3
+            debug=1;
+        else
+            debug=0;
+        end
+        if sum(forbiddens)>0
+            arcs=calculateRegionArc(generatedPoints(:,j),allCircles,allIntersections,forbiddens,debug);
+        else
+            arcs=[];
+        end
+        isUnique=true;
+        for n=2:size(arcs,2)
+            if isempty(allIntersections{arcs(4,n)+1,4})==0
+                isUnique=false;
+            end
+        end
+        for m=1:size(allRegions,1)-1
+            if isequal(allRegions{m+1,4},arcs)
+                isUnique=false;
+                break;
+            end
+        end
+        
+        if isUnique==true
+            allRegions{lastRowAllRegions+1,3}=forbiddenCircleIndices;
+            allRegions{lastRowAllRegions+1,1}=strcat(allCircles{i+1,2},'_F:',allCircles{i+1,3});
+            allRegions{lastRowAllRegions+1,2}=allCircles{i+1,2};
+            allRegions{lastRowAllRegions+1,4}=arcs;
+            
+            %IF THIS REGION IS UNIQUE ***
+            lastRowAllRegions=lastRowAllRegions+1;
+        end
+        
+    end
+    allIntersections{i+1,4}=1;
+    
+    disp('!!!')
+end
+end
+
+function arcs=calculateRegionArc(internalPoint,allCircles,allIntersection,forbiddens,debug)
+%scatter(internalPoint(1,1),internalPoint(2,1))
+horizontalXs=[];
+for i=1:size(allCircles,1)-1
+    [hX,~]=linecirc(0,internalPoint(2,1),allCircles{i+1,4}(1,1),allCircles{i+1,4}(2,1),allCircles{i+1,5}(1,1));
+    if ~isnan(hX(1,1))
+        for m=1:size(hX,2)
+            horizontalXs(1,size(horizontalXs,2)+1)=hX(1,m);
+            horizontalXs(2,size(horizontalXs,2))=i;%INDEX OF THE NEIGHBOR'S CIRCLE
+        end
+    end
+end
+dists=horizontalXs(1,:)-internalPoint(1,1);
+dists(dists<0)=inf;
+[~,I]=min(dists);
+closestInitialPoint=[horizontalXs(1,I),internalPoint(2,1)];
+
+II=horizontalXs(2,I);
+
+if debug==1
+    disp('!!!')
+end
+
+u=[allCircles{II+1,5}(1,1),0];
+v=[closestInitialPoint(1,1)-allCircles{II+1,4}(1,1),closestInitialPoint(1,2)-allCircles{II+1,4}(2,1)];
+u = u/norm(u);
+v = v/norm(v);
+initalAngle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+if closestInitialPoint(1,2)-allCircles{II+1,4}(2,1)<0
+    initalAngle=360-abs(initalAngle);
+end
+
+activeArcNI=horizontalXs(2,I);
+startNeighborArc=activeArcNI;
+currentActiveArc=startNeighborArc;
+arcs=startNeighborArc;
+currentAngle=0;
+
+arcs(2,size(arcs,2))=initalAngle;
+
+
+
+for i=1:size(allIntersection,1)-1
+    u=[1,0];
+    v=[allIntersection{i+1,3}(1,1)-internalPoint(1,1),allIntersection{i+1,3}(2,1)-internalPoint(2,1)];
+    u = u/norm(u);
+    v = v/norm(v);
+    angle=atan2(norm(cross([u,0],[v,0])), dot([u,0],[v,0]))*180/pi;
+    if allIntersection{i+1,3}(2,1)-internalPoint(2,1)<0
+        angle=360-abs(angle);
+    end
+    allIntersection{i+1,7}=angle;
+end
+
+isNewArcFound=true;
+
+debugCounter=0;
+while(isNewArcFound==true)
+    isNewArcFound=false;
+    minAngle=inf;
+    minAngleNotForbidden=inf;
+    
+    transitionArc=-1;
+    transitionAngle=-1;
+    transitionIntersectionIndex=-1;
+    
+    debugCounter=debugCounter+1;
+    
+    if debugCounter==4 && debug==1
+        disp('!!!!!!')
+    end
+    
+    for g=1:size(allIntersection,1)-1
+        if forbiddens(1,currentActiveArc)==1
+            if allIntersection{g+1,1}(1,1)==currentActiveArc
+                %if currentAngle<allIntersection{g+1,7}
+                    %if minAngle>allIntersection{g+1,7}
+                        finalAngle=-1;
+                        
+                        teta_prime=arcs(2,size(arcs,2));
+                        teta=allIntersection{g+1,5};
+                        if teta_prime>0 && teta_prime<180 && teta>0 && teta<180
+                            if teta_prime<=teta
+                                finalAngle=teta-teta_prime;
+                            else
+                                finalAngle=360-(teta_prime-teta);
+                            end
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>0 && teta<180
+                            finalAngle=teta+360-teta_prime;
+                        end
+                        if teta_prime>0 && teta_prime<180 && teta>180 && teta<360
+                            finalAngle=-teta_prime+teta;
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>180 && teta<360
+                            if teta_prime<=teta
+                                finalAngle=teta-teta_prime;
+                            else
+                                finalAngle=360-(teta_prime-teta);
+                            end
+                        end
+                        
+                        disp('From')
+                        allIntersection{g+1,1}(1,1)
+                        disp('To')
+                        allIntersection{g+1,2}(1,1)
+                        finalAngle
+                        disp('******')
+                        
+                        if debugCounter==4 && debug==1
+        disp('!!!!!!')
+    end
+                        if finalAngle<minAngle && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
+                            %candidateGlobalAngle=allIntersection{g+1,7};
+                            minAngle=finalAngle;
+                            transitionArc=allIntersection{g+1,2};
+                            if forbiddens(1,transitionArc)==0
+                                %minAngleNotForbidden=allIntersection{g+1,6};
+                                %minAngle=inf;
+                            else
+                                %minAngleNotForbidden=inf;
+                                %minAngle=allIntersection{g+1,6};
+                            end
+                            transitionAngle=allIntersection{g+1,6};
+                            transitionIntersectionIndex=g;
+                            arcs(3,size(arcs,2))=allIntersection{g+1,5};
+                            isNewArcFound=true;
+                        end
+                    %end
+                %end
+            elseif allIntersection{g+1,2}==currentActiveArc
+                %if currentAngle<allIntersection{g+1,7}
+                    %if minAngle>allIntersection{g+1,7}
+                        finalAngle=-1;
+                        
+                        teta_prime=arcs(2,size(arcs,2));
+                        teta=allIntersection{g+1,6};
+                        if teta_prime>0 && teta_prime<180 && teta>0 && teta<180
+                            if teta_prime<=teta
+                                finalAngle=teta-teta_prime;
+                            else
+                                finalAngle=360-(teta_prime-teta);
+                            end
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>0 && teta<180
+                            finalAngle=(360-teta_prime)+teta;
+                        end
+                        if teta_prime>0 && teta_prime<180 && teta>180 && teta<360
+                            finalAngle=-teta_prime+teta;
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>180 && teta<360
+                            if teta_prime<=teta
+                                finalAngle=teta-teta_prime;
+                            else
+                                finalAngle=360-(teta_prime-teta);
+                            end
+                        end
+                        
+                        disp('From')
+                        allIntersection{g+1,2}(1,1)
+                        disp('To')
+                        allIntersection{g+1,1}(1,1)
+                        finalAngle
+                        disp('******')
+                    
+                        if debugCounter==4 && debug==1
+        disp('!!!!!!')
+    end
+                        if finalAngle<minAngle && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
+                            %candidateGlobalAngle=allIntersection{g+1,7};
+                            minAngle=finalAngle;
+                            transitionArc=allIntersection{g+1,1};
+                            if forbiddens(1,transitionArc)==0
+                                %minAngleNotForbidden=allIntersection{g+1,5};
+                                %minAngle=inf;
+                            else
+                                %minAngleNotForbidden=inf;
+                                %minAngle=allIntersection{g+1,5};
+                            end
+                            transitionAngle=allIntersection{g+1,5};
+                            transitionIntersectionIndex=g;
+                            arcs(3,size(arcs,2))=allIntersection{g+1,6};
+                            isNewArcFound=true;
+                        end
+                    %end
+                %end
+            end
+        else
+            if allIntersection{g+1,1}(1,1)==currentActiveArc
+                %if currentAngle<allIntersection{g+1,7}
+                    %if minAngle>allIntersection{g+1,7}% && allIntersection{g+1,5}<minAngleNotForbidden
+                        finalAngle=-1;
+                        teta_prime=arcs(2,size(arcs,2));
+                        teta=allIntersection{g+1,5};
+                        if teta_prime>0 && teta_prime<180 && teta>0 && teta<180
+                            if teta_prime>=teta
+                                finalAngle=teta_prime-teta;
+                            else
+                                finalAngle=360-(teta-teta_prime);
+                            end
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>0 && teta<180
+                            finalAngle=teta_prime-teta;
+                        end
+                        if teta_prime>0 && teta_prime<180 && teta>180 && teta<360
+                            finalAngle=teta_prime+360-teta;
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>180 && teta<360
+                            if teta_prime>=teta
+                                finalAngle=teta_prime-teta;
+                            else
+                                finalAngle=360-(teta-teta_prime);
+                            end
+                        end
+                        disp('From')
+                        allIntersection{g+1,1}(1,1)
+                        disp('To')
+                        allIntersection{g+1,2}(1,1)
+                        finalAngle
+                        disp('******')
+                        
+                        if debugCounter==4 && debug==1
+        disp('!!!!!!')
+    end
+                        
+                        %angleLeftSide=min(mod(abs(minAngleNotForbidden-allIntersection{g+1,5}),360),mod(abs(360-minAngleNotForbidden+allIntersection{g+1,5}),360));
+                        if finalAngle<minAngleNotForbidden  && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
+                            %candidateGlobalAngle=allIntersection{g+1,7};
+                            minAngleNotForbidden=finalAngle;
+                            %minAngle=allIntersection{g+1,7};
+                            transitionArc=allIntersection{g+1,2};
+                            if forbiddens(1,transitionArc)==0
+                                %minAngleNotForbidden=allIntersection{g+1,6};
+                                %minAngle=inf;
+                            else
+                                %minAngleNotForbidden=inf;
+                                %minAngle=allIntersection{g+1,6};
+                            end
+                            transitionAngle=allIntersection{g+1,6};
+                            transitionIntersectionIndex=g;
+                            arcs(3,size(arcs,2))=allIntersection{g+1,5};
+                            isNewArcFound=true;
+                        end
+                    %end
+                %end
+            elseif allIntersection{g+1,2}==currentActiveArc
+                %if currentAngle<allIntersection{g+1,7}
+                    %if minAngle>allIntersection{g+1,7}% && allIntersection{g+1,6}<minAngleNotForbidden
+                        finalAngle=-1;
+                        teta_prime=arcs(2,size(arcs,2));
+                        teta=allIntersection{g+1,6};
+                        if teta_prime>0 && teta_prime<180 && teta>0 && teta<180
+                            if teta_prime>=teta
+                                finalAngle=teta_prime-teta;
+                            else
+                                finalAngle=360-(teta-teta_prime);
+                            end
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>0 && teta<180
+                            finalAngle=teta_prime-teta;
+                        end
+                        if teta_prime>0 && teta_prime<180 && teta>180 && teta<360
+                            finalAngle=teta_prime+360-teta;
+                        end
+                        if teta_prime>180 && teta_prime<360 && teta>180 && teta<360
+                            if teta_prime>=teta
+                                finalAngle=teta_prime-teta;
+                            else
+                                finalAngle=360-(teta-teta_prime);
+                            end
+                        end
+                        disp('From')
+                        allIntersection{g+1,2}(1,1)
+                        disp('To')
+                        allIntersection{g+1,1}(1,1)
+                        finalAngle
+                        disp('******')
+                        
+                        if debugCounter==4 && debug==1
+        disp('!!!!!!')
+    end
+                        
+                        %angleLeftSide=min(mod(abs(minAngleNotForbidden-allIntersection{g+1,6}),360),mod(abs(360-minAngleNotForbidden+allIntersection{g+1,6}),360));
+                        if finalAngle<minAngleNotForbidden  && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
+                            %candidateGlobalAngle=allIntersection{g+1,7};
+                            minAngleNotForbidden=finalAngle;
+                            %minAngle=allIntersection{g+1,7};
+                            transitionArc=allIntersection{g+1,1};
+                            if forbiddens(1,transitionArc)==0
+                                %minAngleNotForbidden=allIntersection{g+1,5};
+                                %minAngle=inf;
+                            else
+                                %minAngleNotForbidden=inf;
+                                %minAngle=allIntersection{g+1,5};
+                            end
+                            transitionAngle=allIntersection{g+1,5};
+                            transitionIntersectionIndex=g;
+                            arcs(3,size(arcs,2))=allIntersection{g+1,6};
+                            isNewArcFound=true;
+                        end
+                    %end
+                %end
+            end
+        end
+    end
+    if debug==1
+        disp('!!!')
+    end
+    if transitionArc>-1
+        if arcs(3,size(arcs,2))==arcs(3,1) && size(arcs,2)>1
+            break;%FOUND BEGINNING!
+        end
+        currentActiveArc=transitionArc;
+        currentAngle=minAngle;
+        %globalAngle=candidateGlobalAngle;
+        arcs(1,size(arcs,2)+1)=currentActiveArc;
+        arcs(2,size(arcs,2))=transitionAngle;
+        arcs(4,size(arcs,2))=transitionIntersectionIndex;
+        if forbiddens(1,transitionArc)==1
+            minAngleNotForbidden=inf;
+        else
+            minAngle=inf;
+        end
+    end
+end
+arcs(2,size(arcs,2))=arcs(2,1);
+end
+
+function outut=generateFourPoints(allCircles,intersectionPoint,circle1I,circle2I)
+circle1Center=allCircles{circle1I+1,4};
+tangent1M=((intersectionPoint(2,1)-circle1Center(2,1)))/((intersectionPoint(1,1)-circle1Center(1,1)));
+
+% dXdY=[1;tangent1M];
+% length=(dXdY(1,1)^2)+(dXdY(2,1)^2);
+% dXdY=dXdY/length;
+% dXdY=dXdY/100;
+% point1=intersectionPoint+dXdY;
+% point2=intersectionPoint-dXdY;
+% line([point1(1,1),point2(1,1)],[point1(2,1),point2(2,1)])
+
+circle1Center=allCircles{circle2I+1,4};
+tangent2M=((intersectionPoint(2,1)-circle1Center(2,1)))/((intersectionPoint(1,1)-circle1Center(1,1)));
+
+% dXdY=[1;tangent2M];
+% length=(dXdY(1,1)^2)+(dXdY(2,1)^2);
+% dXdY=dXdY/length;
+% dXdY=dXdY/100;
+% point1=intersectionPoint+dXdY;
+% point2=intersectionPoint-dXdY;
+% line([point1(1,1),point2(1,1)],[point1(2,1),point2(2,1)])
+
+tangent12M=(tangent2M+tangent1M)/2;
+
+dXdY=[1;tangent12M];
+length=(dXdY(1,1)^2)+(dXdY(2,1)^2);
+dXdY=dXdY/length;
+dXdY=dXdY/100;
+point1=intersectionPoint+dXdY;
+point2=intersectionPoint-dXdY;
+line([point1(1,1),point2(1,1)],[point1(2,1),point2(2,1)])
+
+tangent12M=(-1)/tangent12M;
+dXdY=[1;tangent12M];
+length=(dXdY(1,1)^2)+(dXdY(2,1)^2);
+dXdY=dXdY/length;
+dXdY=dXdY/100;
+point3=intersectionPoint+dXdY;
+point4=intersectionPoint-dXdY;
+line([point3(1,1),point4(1,1)],[point3(2,1),point4(2,1)])
+outut=[point1,point2,point3,point4];
+end
+
+function [allCircles,allIntersections,allRegions]=checkAllCircles(allCircles,allIntersections,allRegions)
 noIntersectingCircles=1:size(allCircles,1)-1;
 noIntersectingCircles(2,size(noIntersectingCircles,2))=0;
 for i=1:size(allIntersections,1)-1
@@ -181,18 +663,37 @@ lastRowAllRegions=size(allRegions,1);
 for i=1:size(noIntersectingCircles,2)
     if noIntersectingCircles(2,i)==0
         allCircles{i+1,6}=1;
-        allRegions{lastRowAllRegions,1}=strcat(allCircles{i+1,2},'_F:',allCircles{i+1,3});
-        allRegions{lastRowAllRegions,2}=allCircles{i+1,2};
-        getForbiddensOfPoint() ...
-        allRegions{lastRowAllRegions,3}=...;
-        disp('!!!')
+        allRegions{lastRowAllRegions+1,1}=strcat(allCircles{i+1,2},'_F:',allCircles{i+1,3});
+        allRegions{lastRowAllRegions+1,2}=allCircles{i+1,2};
+        forbiddens=getForbiddensOfPoint(allCircles{i+1,4}(:,1),allCircles);
+        forbiddenCircleIndices=[];
+        forbiddenCircleIndices(1,sum(forbiddens))=0;
+        counter=1;
+        for j=1:size(forbiddens,2)
+            if forbiddens(1,j)==1
+                forbiddenCircleIndices(1,counter)=j;
+                counter=counter+1;
+            end
+        end
+        allRegions{lastRowAllRegions+1,3}=forbiddenCircleIndices;
+        allRegions{lastRowAllRegions+1,4}=i;
+        lastRowAllRegions=size(allRegions,1);
+        %disp('!!!')
     end
 end
-disp('!!!')
+%disp('!!!')
 end
 
 function forbiddens=getForbiddensOfPoint(point,allCircles)
-
+forbiddens(1,size(allCircles,1)-1)=0;
+for i=1:size(allCircles,1)-1
+    CX=allCircles{i+1,4}(1,1);
+    CY=allCircles{i+1,4}(2,1);
+    R=allCircles{i+1,5}(1,1);
+    if (point(1,1)-CX)^2+(point(2,1)-CY)^2<R^2
+        forbiddens(1,i)=1;
+    end
+end
 end
 
 function [SVCells,GVCells]=calcCores(shops,gyms)
@@ -388,7 +889,7 @@ end
 end
 
 function VCells=calcNeighbors(SV,SR,locations,isSelf)
-VCells=cell(1,3);
+VCells=cell(1,5);
 VCells{1,1}='VertexIndices';
 VCells{1,2}='Cell neighbors';
 VCells{1,3}='Cell neighbors circle centers';
@@ -425,7 +926,7 @@ for i=1:size(SR,1)
         centerNeighbor=locations(VCells{i+1,2}(1,j),:);
         centerVector=-centerSelf+centerNeighbor;
         if isSelf==true
-            centers(:,j)=(centerNeighbor-(1/3)*centerVector)';
+            centers(:,j)=(centerSelf-(1/3)*centerVector)';
         else
             centers(:,j)=(centerNeighbor+(1/3)*centerVector)';
         end
@@ -491,5 +992,6 @@ for cir=2:size(VCells,1)
         P = polyshape(xs,ys);
         plot(P,'FaceColor',color,'FaceAlpha',0.6)
     end
+    %disp('!!!')
 end
 end
