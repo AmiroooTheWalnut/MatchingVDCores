@@ -1,19 +1,32 @@
 clc
 clear
 %rng(2157)
-rng(5)
+rng(8)
 %rng(7)%interesting, one circle in the middle
+
 numShops=3;
 numGyms=3;
 
 global shops;
 global gyms;
+global isOnLine
+
+isOnLine=false;
 
 %\/\/\/ random?
 shops=rand(numShops,2);
 gyms=rand(numGyms,2);
+if isOnLine==true
+    for i=1:numShops
+        shops(i,2)=rand(1,1)*0.001;
+    end
+    for i=1:numGyms
+        gyms(i,2)=rand(1,1)*0.001;
+    end
+end
 %^^^ random?
-%shops=[0.5,0.5;0.7,0.15;0.2,0.8;0.9,0.9];
+%shops=[0.191612831748041,0.000111453812378023;0.961874123178780,0.000251245111690548;-0.0309503051438536,0.000964915292526365];
+%gyms=[0.765907856480316,0.000631766052737746;0.538708900811293,0.000816660202615362;0.296800501576222,0.000566081996092756];
 
 global shopsPOIs;
 global gymsPOIs;
@@ -34,6 +47,7 @@ run(shops,gyms);
 function allevents(src,evt)
 global shopsPOIs;
 global gymsPOIs;
+global isOnLine
 n=size(shopsPOIs,2);
 shopPositions(n,2)=0;
 for i=1:n
@@ -43,6 +57,14 @@ n=size(gymsPOIs,2);
 gymPositions(n,2)=0;
 for i=1:n
     gymPositions(i,:)=gymsPOIs{1,i}.Position;
+end
+if isOnLine==true
+    for i=1:size(shopPositions,1)
+        shopPositions(i,2)=rand(1,1)*0.001;
+    end
+    for i=1:size(gymPositions,1)
+        gymPositions(i,2)=rand(1,1)*0.001;
+    end
 end
 figure(1);
 evname = evt.EventName;
@@ -61,29 +83,240 @@ end
 function run(shops,gyms)
 global shopsPOIs;
 global gymsPOIs;
+global isOnLine
 figure(1)
 clf
 hold on
-xlim([0,1])
-ylim([0,1])
+if isOnLine==true
+    ylim([-0.5,0.5])
+    xlim([-1,2])
+else
+    ylim([0,1])
+    xlim([0,1])
+end
 daspect([1,1,1])
 numShops=size(shops,1);
 for i=1:numShops
     shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(shopsPOIs{1,i},'ROIMoved',@allevents);
+    text(shops(i,1)+0.01,shops(i,2)+0.01,num2str(i))
 end
 numGyms=size(gyms,1);
 for i=1:numGyms
     gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:),'Color','g');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
+    text(gyms(i,1)+0.01,gyms(i,2)+0.01,num2str(i))
 end
-%[SVCells,GVCells]=calcCores(shops,gyms);%DONE
-%drawCore(SVCells,GVCells,shops,gyms);%DONE
-
+% \/\/\/ GET CORES AND REGIONS
 drawForbiddenAreas(shops,gyms);
+[SVCells,GVCells]=calcCores(shops,gyms);%DONE
+drawCore(SVCells,GVCells,shops,gyms);%DONE
+% ^^^ GET CORES AND REGIONS
 
+if isOnLine==true
+    % SAMPLE FROM SPACE
+    points=linspace(-1,2,1000);
+    [musts,forbiddens]=assignForbiddensMusts1D(points,shops,gyms);
+else
+    x=-2:0.05:2;
+    y=-2:0.05:2;
+    [X,Y] = meshgrid(x,y);
+    points(2,size(x,2)*size(y,2))=0;
+    counter=1;
+    for i=1:size(X,1)
+        for j=1:size(X,2)
+            points(:,counter)=[X(i,j),Y(i,j)];
+            counter=counter+1;
+        end
+    end
+    [musts,forbiddens]=assignForbiddensMusts2D(points,shops,gyms);
+end
+[f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens);
+x = intlinprog(f,intcon,A,b,Aeq,beq,lb,ub)
+disp('!!!')
+end
+
+function [f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens)
+f=ones(size(musts,1)*size(musts,2),1);
+intcon=1:size(musts,1)*size(musts,2);
+A(2*size(musts,1)*size(musts,2),size(musts,1)*size(musts,2))=0;
+b(2*size(musts,1)*size(musts,2),1)=0;
+counter=1;
+for i=1:size(musts,1)
+    for j=1:size(musts,2)
+        col=((i-1)*size(musts,2))+j;
+        A(counter,col)=-1;
+        b(counter,1)=-musts(i,j);
+        counter=counter+1;
+    end
+end
+for i=1:size(musts,1)
+    for j=1:size(musts,2)
+        col=((i-1)*size(musts,2))+j;
+        A(counter,col)=1;
+        b(counter,1)=1-forbiddens(i,j);
+        counter=counter+1;
+    end
+end
+counter=1;
+Aeq(size(musts,1)+size(musts,2),size(musts,1)*size(musts,2))=0;
+beq(size(musts,1)+size(musts,2),1)=0;
+for i=1:size(musts,1)
+    for j=1:size(musts,2)
+        col=((i-1)*size(musts,2))+j;
+        Aeq(counter,col)=1;
+    end
+    beq(counter,1)=1;
+    counter=counter+1;
+end
+for j=1:size(musts,2)
+    for i=1:size(musts,1)
+        col=((i-1)*size(musts,2))+j;
+        Aeq(counter,col)=1;
+    end
+    beq(counter,1)=1;
+    counter=counter+1;
+end
+lb(size(musts,1)*size(musts,2),1)=0;
+ub(size(musts,1)*size(musts,2),1)=0;
+ub(:,1)=1;
+end
+
+function [musts,forbiddens]=assignForbiddensMusts2D(points,shops,gyms)
+forbiddens(size(shops,1),size(gyms,1))=0;
+musts(size(shops,1),size(gyms,1))=0;
+for i=1:size(points,2)
+    %points(1,i)=0.3;
+    isInShopCores=isInCore(points(:,i),shops);
+    isInGymCores=isInCore(points(:,i),gyms);
+    isInShopForbiddens=isInForbidden(points(:,i),shops);
+    isInGymForbiddens=isInForbidden(points(:,i),gyms);
+    for m=1:size(shops,1)
+        for n=1:size(gyms,1)
+            if isInShopCores(1,m)==1 && isInGymCores(1,n)==1
+                musts(m,n)=1;
+            end
+        end
+    end
+    for m=1:size(shops,1)
+        for n=1:size(gyms,1)
+            if isInShopForbiddens(1,m)==1 && isInGymCores(1,n)==1
+                forbiddens(m,n)=1;
+%                 if forbiddens(1,3)==1
+%                     disp('!!!')
+%                 end
+            end
+        end
+    end
+    for n=1:size(shops,1)
+        for m=1:size(gyms,1)
+            if isInGymForbiddens(1,m)==1 && isInShopCores(1,n)==1
+                forbiddens(n,m)=1;
+%                 if forbiddens(1,3)==1
+%                     disp('!!!')
+%                 end
+            end
+        end
+    end
+%     scatter(points(1,i),0,100)
+    
+%     if sum(sum(forbiddens))>5
+%         disp('!!!')
+%     end
+    %disp('!!!')
+end
+%disp('!!!')
+end
+
+function [musts,forbiddens]=assignForbiddensMusts1D(points,shops,gyms)
+forbiddens(size(shops,1),size(gyms,1))=0;
+musts(size(shops,1),size(gyms,1))=0;
+for i=1:size(points,2)
+    %points(1,i)=0.3;
+    isInShopCores=isInCore([points(1,i);0],shops);
+    isInGymCores=isInCore([points(1,i);0],gyms);
+    isInShopForbiddens=isInForbidden([points(1,i);0],shops);
+    isInGymForbiddens=isInForbidden([points(1,i);0],gyms);
+    for m=1:size(shops,1)
+        for n=1:size(gyms,1)
+            if isInShopCores(1,m)==1 && isInGymCores(1,n)==1
+                musts(m,n)=1;
+            end
+        end
+    end
+    for m=1:size(shops,1)
+        for n=1:size(gyms,1)
+            if isInShopForbiddens(1,m)==1 && isInGymCores(1,n)==1
+                forbiddens(m,n)=1;
+%                 if forbiddens(1,3)==1
+%                     disp('!!!')
+%                 end
+            end
+        end
+    end
+    for n=1:size(shops,1)
+        for m=1:size(gyms,1)
+            if isInGymForbiddens(1,m)==1 && isInShopCores(1,n)==1
+                forbiddens(n,m)=1;
+%                 if forbiddens(1,3)==1
+%                     disp('!!!')
+%                 end
+            end
+        end
+    end
+%     scatter(points(1,i),0,100)
+    
+%     if sum(sum(forbiddens))>5
+%         disp('!!!')
+%     end
+    %disp('!!!')
+end
+%disp('!!!')
+end
+
+function isInCores=isInCore(point,POIs)
+isInCores(1,size(POIs,1))=0;
+for i=1:size(POIs,1)
+    isInCoreTemp=1;
+    for j=1:size(POIs,1)
+        if i~=j
+            if pdist([point';POIs(i,:)])>pdist([point';POIs(j,:)])/2
+                isInCoreTemp=0;
+                break;
+            end
+        end
+    end
+    isInCores(1,i)=isInCoreTemp;
+    if isInCoreTemp==1
+        %scatter(POIs(i,1),POIs(i,2),200);
+        %scatter(point(1,1),0,200,'filled');
+        %disp('!!!')
+    end
+end
+
+%disp('!!!')
+end
+
+function isInForbiddens=isInForbidden(point,POIs)
+isInForbiddens(1,size(POIs,1))=0;
+for i=1:size(POIs,1)
+    for j=1:size(POIs,1)
+        if i~=j
+            if pdist([point';POIs(j,:)])<pdist([point';POIs(i,:)])/2
+                isInForbiddens(1,i)=1;
+                break;
+            end
+        end
+    end
+    if isInForbiddens(1,i)==1
+        %scatter(POIs(i,1),POIs(i,2),200);
+        %scatter(point(1,1),0,200,'filled');
+        %disp('!!!')
+    end
+end
+%disp('!!!')
 end
 
 function drawForbiddenAreas(shops,gyms)
@@ -93,7 +326,7 @@ set(h, 'Color', 'b')
 h=voronoi(gyms(:,1),gyms(:,2));
 set(h, 'Color', 'g')
 
-legend('Shop POI','Shop forbidden','Gym POI','Gym forbidden')
+%legend('Shop POI','Shop forbidden','Gym POI','Gym forbidden')
 
 dt = delaunayTriangulation(shops);
 [SSV,SSR] = voronoiDiagram(dt);
@@ -156,7 +389,7 @@ allIntersections=getAllIntersections(allCircles,allIntersections);
 [allCircles,allIntersections,allRegions]=checkAllCircles(allCircles,allIntersections,allRegions);
 allRegions=checkAllIntersections(allCircles,allIntersections,allRegions);
 drawRegions(allCircles,allRegions);
-disp('!!!')
+%disp('!!!')
 end
 
 function drawRegions(allCircles,allRegions)
@@ -174,7 +407,7 @@ for cir=2:size(allRegions,1)
             yc = allCircles{NI+1,4}(2,1);
             r = allCircles{NI+1,5};
             
-            if size(allRegions{cir,4},1)>2
+            if size(allRegions{cir,4},1)>2 && size(allRegions{cir,4},2)>2% WHY CAN THE SECOND CONDITION HAPPEN?
                 if allRegions{cir,4}(5,i)==1
                     if allRegions{cir,4}(2,i)>allRegions{cir,4}(3,i)
                         theta_p = (allRegions{cir,4}(2,i))*pi/180:eachArcStep:(360)*pi/180;
@@ -203,15 +436,21 @@ for cir=2:size(allRegions,1)
             
             x = xc + r*cos(theta);
             y = yc + r*sin(theta);
-            if allRegions{cir,4}(5,i)==1
+            if size(allRegions{cir,4},1)>2 && size(allRegions{cir,4},2)>2
+                if allRegions{cir,4}(5,i)==1
+                    xs=[xs,x];
+                    ys=[ys,y];
+                else
+                    xs=[xs,flip(x)];
+                    ys=[ys,flip(y)];
+                    %xs=[x,xs];
+                    %ys=[y,ys];
+                end
+            else
                 xs=[xs,x];
                 ys=[ys,y];
-            else
-                xs=[xs,flip(x)];
-                ys=[ys,flip(y)];
-                %xs=[x,xs];
-                %ys=[y,ys];
             end
+            
             isNeedsDraw=true;
         end
     end
@@ -222,7 +461,7 @@ for cir=2:size(allRegions,1)
     end
     %disp('!!!')
 end
-disp('!!!')
+%disp('!!!')
 end
 
 function allIntersections=getAllIntersections(allCircles,allIntersections)
@@ -297,8 +536,8 @@ for i=1:size(allIntersections,1)-1
     generatedPoints=generateFourPoints(allCircles,allIntersections{i+1,3},allIntersections{i+1,1},allIntersections{i+1,2},0.05);
     %scatter(allIntersections{i+1,3}(1,1),allIntersections{i+1,3}(2,1))
     for j=1:4
-        scatter(generatedPoints(1,j),generatedPoints(2,j))
-        text(generatedPoints(1,j),generatedPoints(2,j),num2str(candidateTextNumber))
+        %scatter(generatedPoints(1,j),generatedPoints(2,j))
+        %text(generatedPoints(1,j),generatedPoints(2,j),num2str(candidateTextNumber))
         candidateTextNumber=candidateTextNumber+1;
         forbiddens=getForbiddensOfPoint(generatedPoints(:,j),allCircles);
         forbiddenCircleIndices=[];
@@ -344,7 +583,7 @@ for i=1:size(allIntersections,1)-1
             %IF THIS REGION IS UNIQUE ***
             lastRowAllRegions=lastRowAllRegions+1;
         else
-            disp('NOT UNIQUE')
+            %disp('NOT UNIQUE')
         end
         
     end
@@ -751,7 +990,7 @@ lastRowAllRegions=size(allRegions,1);
 for i=1:size(noIntersectingCircles,2)
     if noIntersectingCircles(2,i)==0
         allCircles{i+1,6}=1;
-        allRegions{lastRowAllRegions+1,1}=strcat(allCircles{i+1,2},'_F:',allCircles{i+1,3});
+        allRegions{lastRowAllRegions+1,1}=lastRowAllRegions;
         allRegions{lastRowAllRegions+1,2}=allCircles{i+1,2};
         forbiddens=getForbiddensOfPoint(allCircles{i+1,4}(:,1),allCircles);
         forbiddenCircleIndices=[];
