@@ -25,8 +25,10 @@ if isOnLine==true
     end
 end
 %^^^ random?
-%shops=[0.191612831748041,0.000111453812378023;0.961874123178780,0.000251245111690548;-0.0309503051438536,0.000964915292526365];
-%gyms=[0.765907856480316,0.000631766052737746;0.538708900811293,0.000816660202615362;0.296800501576222,0.000566081996092756];
+%shops=[0.906,0.55;0.98,0.22;0.88,0.01];
+%gyms=[0.51,0.12;0.35,0.58;0.65,0.32];
+shops=[0.906000000000000,0.550000000000000;0.980000000000000,0.220000000000000;0.880000000000000,0.0100000000000000];
+gyms=[0.488532110091743,0.223241590214067;0.383027522935780,0.538226299694190;0.687355783340648,0.426575066892618];
 
 global shopsPOIs;
 global gymsPOIs;
@@ -100,14 +102,14 @@ for i=1:numShops
     shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(shopsPOIs{1,i},'ROIMoved',@allevents);
-    text(shops(i,1)+0.01,shops(i,2)+0.01,num2str(i))
+    text(shops(i,1)+0.01,shops(i,2)+0.01,strcat('Shop',num2str(i)))
 end
 numGyms=size(gyms,1);
 for i=1:numGyms
     gymsPOIs{1,i} = images.roi.Point(gca,'Position',gyms(i,:),'Color','g');
     %addlistener(shopsPOIs{1,i},'MovingROI',@allevents);
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
-    text(gyms(i,1)+0.01,gyms(i,2)+0.01,num2str(i))
+    text(gyms(i,1)+0.01,gyms(i,2)+0.01,strcat('Gym',num2str(i)))
 end
 % \/\/\/ GET CORES AND REGIONS
 drawForbiddenAreas(shops,gyms);
@@ -133,13 +135,37 @@ else
     end
     [musts,forbiddens]=assignForbiddensMusts2D(points,shops,gyms);
 end
-[f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens);
+distances(size(shops,1),size(gyms,1))=0;
+for i=1:numShops
+    for j=1:numGyms
+        distances(i,j)=pdist([shops(i,:);gyms(j,:)]);
+    end
+end
+[f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens,distances);
 x = intlinprog(f,intcon,A,b,Aeq,beq,lb,ub)
+if isempty(x)==0
+    x=decodeSolution(x,numShops,numGyms,true);
+    sum(sum(x.*distances))
+end
 disp('!!!')
 end
 
-function [f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens)
-f=ones(size(musts,1)*size(musts,2),1);
+function x=decodeSolution(x,numShops,numGyms,isReport)
+x=reshape(x,[numShops,numGyms])';
+if isReport==true
+    for i=1:numShops
+        for j=1:numGyms
+            if x(i,j)==1
+                fprintf('Shop %i is connected to Gym %i\n', i,j)
+            end
+        end
+    end
+end
+end
+
+function [f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens,distances)
+%f=ones(size(musts,1)*size(musts,2),1);
+f=reshape(distances',[size(musts,1)*size(musts,2),1]);
 intcon=1:size(musts,1)*size(musts,2);
 A(2*size(musts,1)*size(musts,2),size(musts,1)*size(musts,2))=0;
 b(2*size(musts,1)*size(musts,2),1)=0;
@@ -204,9 +230,9 @@ for i=1:size(points,2)
         for n=1:size(gyms,1)
             if isInShopForbiddens(1,m)==1 && isInGymCores(1,n)==1
                 forbiddens(m,n)=1;
-%                 if forbiddens(1,3)==1
-%                     disp('!!!')
-%                 end
+                 %if forbiddens(2,1)==1
+                 %    disp('!!!')
+                 %end
             end
         end
     end
@@ -1241,9 +1267,9 @@ for i=1:size(SR,1)
     end
     VCells{i+1,2}=unique(neighbors);
 end
-for i=1:size(SR,1)
-    text(locations(i,1),locations(i,2),num2str(i))
-end
+%for i=1:size(SR,1)
+%    text(locations(i,1),locations(i,2),num2str(i))
+%end
 %\/\/\/ DETECT NEIGHBOR CIRCLES' CENTERS AND RADIUSES
 for i=1:size(SR,1)
     centers=zeros(2,size(VCells{i+1,2},2));
