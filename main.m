@@ -97,6 +97,11 @@ else
     xlim([0,1])
 end
 daspect([1,1,1])
+% \/\/\/ GET CORES AND REGIONS
+drawForbiddenAreas(shops,gyms);
+[SVCells,GVCells]=calcCores(shops,gyms);%DONE
+drawCore(SVCells,GVCells,shops,gyms);%DONE
+% ^^^ GET CORES AND REGIONS
 numShops=size(shops,1);
 for i=1:numShops
     shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
@@ -111,11 +116,6 @@ for i=1:numGyms
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
     text(gyms(i,1)+0.01,gyms(i,2)+0.01,strcat('Gym',num2str(i)))
 end
-% \/\/\/ GET CORES AND REGIONS
-drawForbiddenAreas(shops,gyms);
-[SVCells,GVCells]=calcCores(shops,gyms);%DONE
-drawCore(SVCells,GVCells,shops,gyms);%DONE
-% ^^^ GET CORES AND REGIONS
 
 if isOnLine==true
     % SAMPLE FROM SPACE
