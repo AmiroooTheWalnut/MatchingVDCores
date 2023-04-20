@@ -1,19 +1,24 @@
 clc
-clear
+clear all
 %rng(2157)
 rng(8)
 %rng(7)%interesting, one circle in the middle
-
-numShops=3;
-numGyms=3;
-
 global shops;
 global gyms;
 global isOnLine
+global isChangedForSave;
+global isDrawForbiddens;
+global isDrawCores;
+isChangedForSave=true;
 
 isOnLine=false;
 
-%\/\/\/ random?
+numShops=6;
+numGyms=6;
+isDrawForbiddens=false;
+isDrawCores=false;
+
+%\/\/\/ random GYM SHOP locations
 shops=rand(numShops,2);
 gyms=rand(numGyms,2);
 if isOnLine==true
@@ -24,11 +29,11 @@ if isOnLine==true
         gyms(i,2)=rand(1,1)*0.001;
     end
 end
-%^^^ random?
+%^^^ random GYM SHOP locations
 %shops=[0.906,0.55;0.98,0.22;0.88,0.01];
 %gyms=[0.51,0.12;0.35,0.58;0.65,0.32];
-shops=[0.906000000000000,0.550000000000000;0.980000000000000,0.220000000000000;0.880000000000000,0.0100000000000000];
-gyms=[0.488532110091743,0.223241590214067;0.383027522935780,0.538226299694190;0.687355783340648,0.426575066892618];
+%shops=[0.906000000000000,0.550000000000000;0.980000000000000,0.220000000000000;0.880000000000000,0.0100000000000000];
+%gyms=[0.488532110091743,0.223241590214067;0.383027522935780,0.538226299694190;0.687355783340648,0.426575066892618];
 
 global shopsPOIs;
 global gymsPOIs;
@@ -49,7 +54,10 @@ run(shops,gyms);
 function allevents(src,evt)
 global shopsPOIs;
 global gymsPOIs;
+global shops;
+global gyms;
 global isOnLine
+global isChangedForSave;
 n=size(shopsPOIs,2);
 shopPositions(n,2)=0;
 for i=1:n
@@ -76,18 +84,69 @@ if ~isempty(axesHandlesToChildObjects)
 end
 switch(evname)
     case{'MovingROI'}
+        shops=shopPositions;
+        gyms=gymPositions;
+        title('RUNNING ...')
         run(shopPositions,gymPositions);
+        title('press shift+s to save and shift+l to load')
     case{'ROIMoved'}
+        shops=shopPositions;
+        gyms=gymPositions;
+        title('RUNNING ...')
         run(shopPositions,gymPositions);
+        title('press shift+s to save and shift+l to load')
 end
+isChangedForSave=true;
+end
+
+function saveLoadShopGym(src,event)
+global shopsPOIs;
+global gymsPOIs;
+global shops;
+global gyms;
+global isChangedForSave;
+%if(isChangedForSave==true)
+    %disp(event.Key)
+    %disp(event.Modifier)
+    if(size(event.Modifier,2)>0)
+        if(strcmp(event.Key,'s') && strcmp(event.Modifier{1,1},'shift'))
+            title('SAVING ...')
+            n=size(shopsPOIs,2);
+            shopPositions(n,2)=0;
+            for i=1:n
+                shopPositions(i,:)=shopsPOIs{1,i}.Position;
+            end
+            n=size(gymsPOIs,2);
+            gymPositions(n,2)=0;
+            for i=1:n
+                gymPositions(i,:)=gymsPOIs{1,i}.Position;
+            end
+            save('inputShopGym.mat','shopPositions','gymPositions')
+            isChangedForSave=false;
+            title('press shift+s to save and shift+l to load')
+        elseif(strcmp(event.Key,'l') && strcmp(event.Modifier{1,1},'shift'))
+            title('LOADING ...')
+            load inputShopGym.mat
+            shops=shopPositions;
+            gyms=gymPositions;
+            run(shops,gyms);
+            title('press shift+s to save and shift+l to load')
+        end
+    end
+%end
+
 end
 
 function run(shops,gyms)
 global shopsPOIs;
 global gymsPOIs;
 global isOnLine
-figure(1)
+global isDrawForbiddens;
+global isDrawCores;
+f=figure(1);
 clf
+set(f,'KeyPressFcn',@saveLoadShopGym);
+title('press shift+s to save and shift+l to load')
 hold on
 if isOnLine==true
     ylim([-0.5,0.5])
@@ -97,11 +156,6 @@ else
     xlim([0,1])
 end
 daspect([1,1,1])
-% \/\/\/ GET CORES AND REGIONS
-drawForbiddenAreas(shops,gyms);
-[SVCells,GVCells]=calcCores(shops,gyms);%DONE
-drawCore(SVCells,GVCells,shops,gyms);%DONE
-% ^^^ GET CORES AND REGIONS
 numShops=size(shops,1);
 for i=1:numShops
     shopsPOIs{1,i} = images.roi.Point(gca,'Position',shops(i,:),'Color','b');
@@ -116,6 +170,15 @@ for i=1:numGyms
     addlistener(gymsPOIs{1,i},'ROIMoved',@allevents);
     text(gyms(i,1)+0.01,gyms(i,2)+0.01,strcat('Gym',num2str(i)))
 end
+% \/\/\/ GET CORES AND REGIONS
+if isDrawForbiddens==true
+    drawForbiddenAreas(shops,gyms);
+end
+if isDrawCores==true
+    [SVCells,GVCells]=calcCores(shops,gyms);%DONE
+    drawCore(SVCells,GVCells,shops,gyms);%DONE
+end
+% ^^^ GET CORES AND REGIONS
 
 if isOnLine==true
     % SAMPLE FROM SPACE
@@ -138,25 +201,39 @@ end
 distances(size(shops,1),size(gyms,1))=0;
 for i=1:numShops
     for j=1:numGyms
-        distances(i,j)=pdist([shops(i,:);gyms(j,:)]);
+        %distances(i,j)=pdist([shops(i,:);gyms(j,:)]);
+        distances(i,j)=manualPdist([shops(i,:);gyms(j,:)]);
     end
 end
+
+
+%Alon 
+%datetime
+%writematrix(gyms, strcat('gyms',char(datetime)));
+%writematrix(shops, strcat('shops',char(datetime)));
+
+%Alon: Please add 
+
 [f,intcon,A,b,Aeq,beq,lb,ub]=createILP(musts,forbiddens,distances);
 x = intlinprog(f,intcon,A,b,Aeq,beq,lb,ub)
+datetime
 if isempty(x)==0
     x=decodeSolution(x,numShops,numGyms,true);
-    sum(sum(x.*distances))
+    objValue=sum(sum(x.*distances))
 end
-disp('!!!')
+%disp('!!!')
 end
 
 function x=decodeSolution(x,numShops,numGyms,isReport)
+global shops;
+global gyms;
 x=reshape(x,[numShops,numGyms])';
 if isReport==true
     for i=1:numShops
         for j=1:numGyms
             if x(i,j)==1
                 fprintf('Shop %i is connected to Gym %i\n', i,j)
+                line([shops(i,1),gyms(j,1)],[shops(i,2),gyms(j,2)],'color','r')
             end
         end
     end
@@ -230,9 +307,9 @@ for i=1:size(points,2)
         for n=1:size(gyms,1)
             if isInShopForbiddens(1,m)==1 && isInGymCores(1,n)==1
                 forbiddens(m,n)=1;
-                 %if forbiddens(2,1)==1
-                 %    disp('!!!')
-                 %end
+                %if forbiddens(2,1)==1
+                %    disp('!!!')
+                %end
             end
         end
     end
@@ -240,17 +317,17 @@ for i=1:size(points,2)
         for m=1:size(gyms,1)
             if isInGymForbiddens(1,m)==1 && isInShopCores(1,n)==1
                 forbiddens(n,m)=1;
-%                 if forbiddens(1,3)==1
-%                     disp('!!!')
-%                 end
+                %                 if forbiddens(1,3)==1
+                %                     disp('!!!')
+                %                 end
             end
         end
     end
-%     scatter(points(1,i),0,100)
+    %     scatter(points(1,i),0,100)
     
-%     if sum(sum(forbiddens))>5
-%         disp('!!!')
-%     end
+    %     if sum(sum(forbiddens))>5
+    %         disp('!!!')
+    %     end
     %disp('!!!')
 end
 %disp('!!!')
@@ -276,9 +353,9 @@ for i=1:size(points,2)
         for n=1:size(gyms,1)
             if isInShopForbiddens(1,m)==1 && isInGymCores(1,n)==1
                 forbiddens(m,n)=1;
-%                 if forbiddens(1,3)==1
-%                     disp('!!!')
-%                 end
+                %                 if forbiddens(1,3)==1
+                %                     disp('!!!')
+                %                 end
             end
         end
     end
@@ -286,17 +363,17 @@ for i=1:size(points,2)
         for m=1:size(gyms,1)
             if isInGymForbiddens(1,m)==1 && isInShopCores(1,n)==1
                 forbiddens(n,m)=1;
-%                 if forbiddens(1,3)==1
-%                     disp('!!!')
-%                 end
+                %                 if forbiddens(1,3)==1
+                %                     disp('!!!')
+                %                 end
             end
         end
     end
-%     scatter(points(1,i),0,100)
+    %     scatter(points(1,i),0,100)
     
-%     if sum(sum(forbiddens))>5
-%         disp('!!!')
-%     end
+    %     if sum(sum(forbiddens))>5
+    %         disp('!!!')
+    %     end
     %disp('!!!')
 end
 %disp('!!!')
@@ -308,7 +385,8 @@ for i=1:size(POIs,1)
     isInCoreTemp=1;
     for j=1:size(POIs,1)
         if i~=j
-            if pdist([point';POIs(i,:)])>pdist([point';POIs(j,:)])/2
+            %if pdist([point';POIs(i,:)])>pdist([point';POIs(j,:)])/2
+            if manualPdist([point';POIs(i,:)])>manualPdist([point';POIs(j,:)])/2
                 isInCoreTemp=0;
                 break;
             end
@@ -330,7 +408,8 @@ isInForbiddens(1,size(POIs,1))=0;
 for i=1:size(POIs,1)
     for j=1:size(POIs,1)
         if i~=j
-            if pdist([point';POIs(j,:)])<pdist([point';POIs(i,:)])/2
+            %if pdist([point';POIs(j,:)])<pdist([point';POIs(i,:)])/2
+            if manualPdist([point';POIs(j,:)])<manualPdist([point';POIs(i,:)])/2
                 isInForbiddens(1,i)=1;
                 break;
             end
@@ -722,15 +801,15 @@ while(isNewArcFound==true)
                     end
                 end
                 
-%                 disp('From')
-%                 allIntersection{g+1,1}(1,1)
-%                 disp('To')
-%                 allIntersection{g+1,2}(1,1)
-%                 finalAngle
-%                 disp('******')
+                %                 disp('From')
+                %                 allIntersection{g+1,1}(1,1)
+                %                 disp('To')
+                %                 allIntersection{g+1,2}(1,1)
+                %                 finalAngle
+                %                 disp('******')
                 
                 if debugCounter==4 && debug==1
-%                     disp('!!!!!!')
+                    %                     disp('!!!!!!')
                 end
                 if finalAngle<minAngle && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
                     %candidateGlobalAngle=allIntersection{g+1,7};
@@ -779,15 +858,15 @@ while(isNewArcFound==true)
                     end
                 end
                 
-%                 disp('From')
-%                 allIntersection{g+1,2}(1,1)
-%                 disp('To')
-%                 allIntersection{g+1,1}(1,1)
-%                 finalAngle
-%                 disp('******')
+                %                 disp('From')
+                %                 allIntersection{g+1,2}(1,1)
+                %                 disp('To')
+                %                 allIntersection{g+1,1}(1,1)
+                %                 finalAngle
+                %                 disp('******')
                 
                 if debugCounter==4 && debug==1
-%                     disp('!!!!!!')
+                    %                     disp('!!!!!!')
                 end
                 if finalAngle<minAngle && finalAngle~=0% && allIntersection{g+1,7}>globalAngle
                     %candidateGlobalAngle=allIntersection{g+1,7};
@@ -836,15 +915,15 @@ while(isNewArcFound==true)
                         finalAngle=360-(teta-teta_prime);
                     end
                 end
-%                 disp('From')
-%                 allIntersection{g+1,1}(1,1)
-%                 disp('To')
-%                 allIntersection{g+1,2}(1,1)
-%                 finalAngle
-%                 disp('******')
+                %                 disp('From')
+                %                 allIntersection{g+1,1}(1,1)
+                %                 disp('To')
+                %                 allIntersection{g+1,2}(1,1)
+                %                 finalAngle
+                %                 disp('******')
                 
                 if debugCounter==4 && debug==1
-%                     disp('!!!!!!')
+                    %                     disp('!!!!!!')
                 end
                 
                 %angleLeftSide=min(mod(abs(minAngleNotForbidden-allIntersection{g+1,5}),360),mod(abs(360-minAngleNotForbidden+allIntersection{g+1,5}),360));
@@ -894,15 +973,15 @@ while(isNewArcFound==true)
                         finalAngle=360-(teta-teta_prime);
                     end
                 end
-%                 disp('From')
-%                 allIntersection{g+1,2}(1,1)
-%                 disp('To')
-%                 allIntersection{g+1,1}(1,1)
-%                 finalAngle
-%                 disp('******')
+                %                 disp('From')
+                %                 allIntersection{g+1,2}(1,1)
+                %                 disp('To')
+                %                 allIntersection{g+1,1}(1,1)
+                %                 finalAngle
+                %                 disp('******')
                 
                 if debugCounter==4 && debug==1
-%                     disp('!!!!!!')
+                    %                     disp('!!!!!!')
                 end
                 
                 %angleLeftSide=min(mod(abs(minAngleNotForbidden-allIntersection{g+1,6}),360),mod(abs(360-minAngleNotForbidden+allIntersection{g+1,6}),360));
@@ -930,7 +1009,7 @@ while(isNewArcFound==true)
         end
     end
     if debug==1
-%         disp('!!!')
+        %         disp('!!!')
     end
     if transitionArc>-1
         if arcs(3,size(arcs,2))==arcs(3,1) && size(arcs,2)>1
@@ -983,7 +1062,7 @@ tangent2M=((intersectionPoint(2,1)-circle1Center(2,1)))/((intersectionPoint(1,1)
 tangent12M=(tangent2M+tangent1M)/2;
 
 if tangent12M>10
-%     disp('!!!')
+    %     disp('!!!')
 end
 
 dXdY=[1;tangent12M];
@@ -1347,4 +1426,8 @@ for cir=2:size(VCells,1)
     end
     %disp('!!!')
 end
+end
+
+function dist=manualPdist(points)
+dist=sqrt((points(1,1)-points(2,1))^2+(points(1,2)-points(2,2))^2);
 end
